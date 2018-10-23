@@ -1,5 +1,8 @@
 #include<IRremote.h>
 #include<MsTimer2.h>
+#include<Thread.h>
+
+Thread myThread = Thread();
 
 //小车运动控制
 #define EN1  4
@@ -21,7 +24,12 @@
 #define barrR 8
 //遥控
 int RECV_PIN = 11; // 红外一体化接收头连接到Arduino 11号引脚
+
 IRrecv irrecv(RECV_PIN);
+decode_results results; // 用于存储编码结果的对象
+
+bool goOnline = false;
+bool goAvoid = false;
 
 enum btn {
   btn0 = 16738455, //0
@@ -44,9 +52,6 @@ enum btn {
   btnSub   = 16754775, //-
   btnAdd   = 16748655 //+
 };
-
-decode_results results; // 用于存储编码结果的对象
-
 
 boolean keepMode = true;
 boolean rem_status;
@@ -71,6 +76,10 @@ void setup()
   irrecv.enableIRIn(); // 初始化红外解码
 //  MsTimer2::set(200, controller); // 定时器间隔 0.5s （500ms = 0.5s）
 //  MsTimer2::start();//开始计时
+//多线程
+  myThread.onRun(controller);
+  myThread.setInterval(200);
+  
 }
 
 //单轮控制
@@ -118,7 +127,6 @@ void _stop() {
   analogWrite(PWM2, 0);
 }
 
-
 void turnLeft(float spe, boolean ifAhead) {
   if (ifAhead) {
     ahead(spe, LEFT);
@@ -140,7 +148,6 @@ void turnRight(float spe, boolean ifAhead) {
   //  delay(40);
 }
 
-
 // 扫描地上的线构建状态
 int scanLine() {
   return digitalRead(lineL) * 4 + digitalRead(lineM) * 2 + digitalRead(lineR) * 1;
@@ -158,8 +165,9 @@ void changeMode() {
 
 int lastState = 0;
 //避障
-void goAvoidBarr() {
-  switch (scanBarr()) {
+void goAvoidBarr(boolean ifOn) {
+  if(ifOn){
+    switch (scanBarr()) {
     case 0://前方都有障碍-右转
       lastState = 0;
       gocircle(70, true);
@@ -195,15 +203,17 @@ void goAvoidBarr() {
       gohead(90);
       break;
     default:
-      
       break; //changeMode遥控刷新控制状态，跳出while循环
+    }
   }
+  
 }
 
 bool keepAhead;
 // 主功能模块1：寻线
-void goOnLine() {
-  switch (scanLine()) {
+void goOnLine(boolean ifOn) {
+  if(ifOn){
+    switch (scanLine()) {
     case 0://直行
       gohead(90);
       keepAhead = true;
@@ -245,18 +255,23 @@ void goOnLine() {
     default:
       //      Serial.println(line_codes);
       break; //changeMode遥控刷新控制状态，跳出while循环
+    }
   }
+  
 }
-
 
 void controller() {
   if (irrecv.decode(&results)) {
     switch (results.value) {
-      case btn2: gohead(100);  break;
-      case btn8: goback(100);  break;
-      case btn4: turnLeft(100, true);  break;
-      case btn6: turnRight(100, true);  break;
+      case btn2: gohead(100);delay(500);  break;
+      case btn8: goback(100);delay(500);  break;
+      case btn4: turnLeft(100, true);delay(500);  break;
+      case btn6: turnRight(100, true);delay(500);  break;
       case btn5: _stop();  break;
+
+      //小车模式切换1,3
+      case btn1:goOnline = true;goAvoid=false;break;
+      case btn3:goOnline = false;goAvoid=true;break;
       default:
         Serial.println(results.value);
         keepMode = false;
@@ -267,7 +282,8 @@ void controller() {
 
 void loop()
 {
-  //  goOnLine(scanLine());
-  controller();
-  goAvoidBarr();
+  if(myThread.shouldRun())
+    myThread.run();
+  goAvoidBarr(goAvoid);
+  goOnLine(goOnline);
 }

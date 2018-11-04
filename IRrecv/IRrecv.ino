@@ -48,6 +48,6 @@ void loop() {
        {
            digitalWrite(LEDpin,LOW);
        }
-    irrecv.resume(); // 接收下一个编码
+        irrecv.resume(); // 接收下一个编码
     }
 }
